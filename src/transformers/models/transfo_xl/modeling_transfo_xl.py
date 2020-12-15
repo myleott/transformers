@@ -194,6 +194,16 @@ class PositionalEmbedding(nn.Module):
             return pos_emb[:, None, :]
 
 
+class ReZeroLayerNorm(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.resweight = nn.Parameter(torch.Tensor([0]))
+
+    def forward(self, x):
+        return x * self.resweight
+
+
 class PositionwiseFF(nn.Module):
     def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5):
         super().__init__()
@@ -210,7 +220,7 @@ class PositionwiseFF(nn.Module):
             nn.Dropout(dropout),
         )
 
-        self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
+        self.layer_norm = ReZeroLayerNorm()
 
         self.pre_lnorm = pre_lnorm
 
@@ -226,7 +236,7 @@ class PositionwiseFF(nn.Module):
             core_out = self.CoreNet(inp)
 
             # residual connection + layer normalization
-            output = self.layer_norm(inp + core_out)
+            output = inp + self.layer_norm(core_out)
 
         return output
 
@@ -257,7 +267,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         self.dropatt = nn.Dropout(dropatt)
         self.o_net = nn.Linear(n_head * d_head, d_model, bias=False)
 
-        self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
+        self.layer_norm = ReZeroLayerNorm()
 
         self.scale = 1 / (d_head ** 0.5)
 
@@ -365,7 +375,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
             outputs = [w + attn_out]
         else:
             # residual connection + layer normalization
-            outputs = [self.layer_norm(w + attn_out)]
+            outputs = [w + self.layer_norm(attn_out)]
 
         if output_attentions:
             outputs.append(attn_prob)
